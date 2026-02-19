@@ -1,17 +1,28 @@
 # CRBL Fight Clock
 
-A standalone CRBL fight clock web app that runs as a local page using Python's built-in web server.
+A standalone CRBL match timer page that mirrors your Scratch workflow while adding richer timing, keyboard controls, and audio cues.
 
 ## Run locally
 
 ```bash
-python server.py
+python3 server.py
 ```
 
-Open `http://localhost:8000`.
+Then open <http://localhost:8000>.
 
 ## Controls
 
-- `Space`: start sequence / pause / resume
-- `r`: reset to configured fight time
-- Fight time input supports `M:SS` or `MM:SS` from `0:01` to `59:59`
+- `Space`: Start (with black screen + 3-2-1-GO), pause, or resume (3-2-1-GO)
+- `r`: Reset to the configured fight duration
+- Duration controls: Set any value from `0:01` to `59:59`
+
+## Match behavior implemented
+
+- Defaults to `2:00`
+- One-digit minute display below 10 minutes (e.g. `1:24`), two digits at 10+
+- 5-second black pre-start screen, then `3`, `2`, `1`, `GO!`
+- Pause overlay with `Match Paused`, plus resume/reset prompts
+- Last 10 seconds display in red
+- Last 10 seconds ticking sound while running
+- Final buzzer and 2-second flashing timer at `0:00`
+- Countdown buzzers for `3`, `2`, `1`; triple higher-pitch buzz for `GO!`
