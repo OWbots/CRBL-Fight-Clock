@@ -1,0 +1,137 @@
+:root {
+  --bg: #000;
+  --cyan: #16d6e5;
+  --purple: #8f61ff;
+  --red: #ff1f1f;
+  --green: #2dff4b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--cyan);
+  font-family: "Trebuchet MS", "Segoe UI", Tahoma, sans-serif;
+}
+
+.clock-app {
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  padding: 1rem 1.5rem 2rem;
+  gap: 1rem;
+}
+
+.topbar {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  align-items: center;
+  border-bottom: 10px solid var(--cyan);
+  padding-bottom: 0.75rem;
+}
+
+.logo-mark {
+  width: 120px;
+  height: 120px;
+  border: 8px solid #2db8ec;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #2db8ec;
+  font-weight: 900;
+  font-style: italic;
+}
+
+.logo-ring { font-size: clamp(1.5rem, 2.8vw, 2.4rem); }
+
+h1 {
+  margin: 0;
+  color: var(--cyan);
+  letter-spacing: 0.08em;
+  font-size: clamp(2.2rem, 6vw, 5rem);
+}
+
+#statusText {
+  margin: 0;
+  color: var(--purple);
+  font-size: clamp(1rem, 2.5vw, 2.5rem);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  color: #d5ffff;
+}
+
+.controls input,
+.controls button {
+  font-size: 1.2rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.4rem;
+  border: 2px solid var(--cyan);
+  background: #041218;
+  color: #d8ffff;
+}
+
+.controls button { cursor: pointer; }
+
+.stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.timer {
+  font-family: "Impact", "Arial Black", sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  color: var(--cyan);
+  font-size: clamp(8rem, 34vw, 28rem);
+  line-height: 0.9;
+  text-shadow: 0 0 14px rgba(22, 214, 229, 0.3);
+}
+
+.timer.red {
+  color: var(--red);
+  text-shadow: 0 0 14px rgba(255, 31, 31, 0.5);
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--cyan);
+  font-family: "Arial Black", "Impact", sans-serif;
+  font-size: clamp(5rem, 28vw, 24rem);
+  background: #000;
+  z-index: 3;
+}
+
+.overlay.small {
+  font-size: clamp(3rem, 12vw, 9rem);
+}
+
+.hidden { display: none !important; }
+
+.paused-help {
+  text-align: center;
+  font-size: clamp(1.3rem, 3vw, 2.5rem);
+  line-height: 1.2;
+}
+
+.paused-help p:first-child { color: #ffec76; }
+.paused-help p:nth-child(2) { color: var(--green); }
+.paused-help p:nth-child(3) { color: var(--red); }
+
+@media (max-width: 750px) {
+  .topbar { grid-template-columns: 80px 1fr; }
+  .logo-mark { width: 70px; height: 70px; border-width: 5px; }
+  .controls { justify-content: center; }
+}
