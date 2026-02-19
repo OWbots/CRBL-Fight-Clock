@@ -1,300 +1,312 @@
-const DEFAULT_SECONDS = 120;
+const timerContainer = document.getElementById('timerContainer');
+const statusLine = document.getElementById('statusLine');
+const overlay = document.getElementById('overlay');
+const overlayText = document.getElementById('overlayText');
+const pauseInfo = document.getElementById('pauseInfo');
+const minutesInput = document.getElementById('durationMinutes');
+const secondsInput = document.getElementById('durationSeconds');
+const applyDurationBtn = document.getElementById('applyDuration');
+
+const SEGMENTS = {
+  0: ['a', 'b', 'c', 'd', 'e', 'f'],
+  1: ['b', 'c'],
+  2: ['a', 'b', 'g', 'e', 'd'],
+  3: ['a', 'b', 'g', 'c', 'd'],
+  4: ['f', 'g', 'b', 'c'],
+  5: ['a', 'f', 'g', 'c', 'd'],
+  6: ['a', 'f', 'g', 'e', 'c', 'd'],
+  7: ['a', 'b', 'c'],
+  8: ['a', 'b', 'c', 'd', 'e', 'f', 'g'],
+  9: ['a', 'b', 'c', 'd', 'f', 'g']
+};
 
 const state = {
-  configuredSeconds: DEFAULT_SECONDS,
-  remainingMs: DEFAULT_SECONDS * 1000,
-  mode: 'idle', // idle, prestart, running, paused, finished
-  timerInterval: null,
-  animationInProgress: false,
-  tenSecondTicking: false,
-  audioCtx: null,
-  tickOsc: null,
-  tickGain: null,
-  lastFrameMs: null,
+  configuredSeconds: 120,
+  remainingMs: 120000,
+  phase: 'idle', // idle | prestart_black | prestart_countdown | running | paused | finished
+  rafId: null,
+  runStartTs: null,
+  runStartMs: null,
+  tickingInterval: null,
+  flashInterval: null,
+  flashVisible: true,
+  audio: null
 };
 
-const el = {
-  timeInput: document.getElementById('timeInput'),
-  applyTimeBtn: document.getElementById('applyTimeBtn'),
-  statusText: document.getElementById('statusText'),
-  timerDisplay: document.getElementById('timerDisplay'),
-  overlayText: document.getElementById('overlayText'),
-  pausedHelp: document.getElementById('pausedHelp'),
-};
-
-function ensureAudio() {
-  if (!state.audioCtx) {
-    state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if (state.audioCtx.state === 'suspended') {
-    state.audioCtx.resume();
-  }
+function clampDuration(mins, secs) {
+  const total = mins * 60 + secs;
+  return Math.max(1, Math.min(3599, total));
 }
 
-function tone({ frequency = 220, duration = 0.18, type = 'sawtooth', volume = 0.35, when = 0 }) {
-  ensureAudio();
-  const ctx = state.audioCtx;
-  const start = ctx.currentTime + when;
-  const stop = start + duration;
-
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(frequency, start);
-
-  gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.exponentialRampToValueAtTime(volume, start + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.0001, stop);
-
-  osc.connect(gain).connect(ctx.destination);
-  osc.start(start);
-  osc.stop(stop + 0.01);
+function formatTimeFromMs(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-function playBuzzer() {
-  tone({ frequency: 120, duration: 0.7, type: 'square', volume: 0.55 });
-  tone({ frequency: 100, duration: 0.7, type: 'square', volume: 0.42, when: 0.02 });
-}
+function buildDigits(timeText, isRed = false) {
+  timerContainer.innerHTML = '';
+  const chars = timeText.split('');
+  const digitCount = chars.filter((c) => /\d/.test(c)).length;
 
-function playStartCountBuzz() {
-  tone({ frequency: 140, duration: 0.28, type: 'square', volume: 0.5 });
-}
+  const widthPerDigit = digitCount >= 4 ? 17 : 22;
+  timerContainer.style.setProperty('--digit-width', `${widthPerDigit}vw`);
+  timerContainer.style.setProperty('--digit-height', `${Math.round(widthPerDigit * 1.8)}vw`);
+  timerContainer.style.setProperty('--digit-color', isRed ? 'var(--red)' : 'var(--cyan)');
 
-function playGoTripleBuzz() {
-  [0, 0.12, 0.24].forEach((w, i) => tone({
-    frequency: 170 + i * 20,
-    duration: 0.11,
-    type: 'square',
-    volume: 0.52,
-    when: w,
-  }));
-}
-
-function startTickingSound() {
-  if (state.tenSecondTicking) return;
-  ensureAudio();
-  state.tenSecondTicking = true;
-  const ctx = state.audioCtx;
-  state.tickOsc = ctx.createOscillator();
-  state.tickGain = ctx.createGain();
-  state.tickOsc.type = 'square';
-  state.tickOsc.frequency.setValueAtTime(6, ctx.currentTime);
-  state.tickGain.gain.setValueAtTime(0.0001, ctx.currentTime);
-  state.tickGain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.05);
-  state.tickOsc.connect(state.tickGain).connect(ctx.destination);
-  state.tickOsc.start();
-}
-
-function stopTickingSound() {
-  if (!state.tenSecondTicking) return;
-  state.tenSecondTicking = false;
-  const ctx = state.audioCtx;
-  if (state.tickGain) {
-    state.tickGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.05);
-  }
-  if (state.tickOsc) {
-    state.tickOsc.stop(ctx.currentTime + 0.06);
-  }
-  state.tickOsc = null;
-  state.tickGain = null;
-}
-
-function parseTimeToSeconds(rawValue) {
-  const match = rawValue.trim().match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-  const m = Number(match[1]);
-  const s = Number(match[2]);
-  if (Number.isNaN(m) || Number.isNaN(s)) return null;
-  if (s > 59) return null;
-  const total = m * 60 + s;
-  if (total < 1 || total > 3599) return null;
-  return total;
-}
-
-function formatTime(totalMs) {
-  const totalSeconds = Math.max(0, Math.ceil(totalMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-}
-
-function updateDisplay() {
-  const leftMs = state.remainingMs;
-  el.timerDisplay.textContent = formatTime(leftMs);
-  const sec = Math.ceil(leftMs / 1000);
-  el.timerDisplay.classList.toggle('red', state.mode === 'running' && sec <= 10);
-}
-
-function setStatus(msg) {
-  el.statusText.textContent = msg;
-}
-
-function showOverlay(text, small = false) {
-  el.overlayText.classList.remove('hidden');
-  el.overlayText.classList.toggle('small', small);
-  el.overlayText.textContent = text;
-}
-
-function hideOverlay() {
-  el.overlayText.classList.add('hidden');
-}
-
-function setMode(mode) {
-  state.mode = mode;
-  el.pausedHelp.classList.toggle('hidden', mode !== 'paused');
-}
-
-function clearTimerInterval() {
-  if (state.timerInterval) {
-    cancelAnimationFrame(state.timerInterval);
-    state.timerInterval = null;
-  }
-  state.lastFrameMs = null;
-}
-
-async function runStartSequence() {
-  if (state.animationInProgress) return;
-  state.animationInProgress = true;
-  setMode('prestart');
-  setStatus('Get ready...');
-  hideOverlay();
-
-  showOverlay('', true);
-  await sleep(5000);
-
-  for (const count of ['3', '2', '1']) {
-    showOverlay(count);
-    playStartCountBuzz();
-    await sleep(1000);
-  }
-
-  showOverlay('GO!');
-  playGoTripleBuzz();
-  await sleep(1000);
-  hideOverlay();
-
-  state.animationInProgress = false;
-  startCountdown();
-}
-
-function startCountdown() {
-  setMode('running');
-  setStatus('Space -> Pause   r -> Reset');
-  clearTimerInterval();
-
-  const tick = (ts) => {
-    if (state.mode !== 'running') return;
-
-    if (state.lastFrameMs == null) {
-      state.lastFrameMs = ts;
-    }
-
-    const delta = ts - state.lastFrameMs;
-    state.lastFrameMs = ts;
-    state.remainingMs -= delta;
-
-    const sec = Math.ceil(state.remainingMs / 1000);
-    if (sec <= 10 && state.remainingMs > 0) {
-      startTickingSound();
-    } else {
-      stopTickingSound();
-    }
-
-    if (state.remainingMs <= 0) {
-      state.remainingMs = 0;
-      updateDisplay();
-      finishCountdown();
+  chars.forEach((ch) => {
+    if (ch === ':') {
+      const colon = document.createElement('div');
+      colon.className = 'colon';
+      timerContainer.appendChild(colon);
       return;
     }
 
+    const digit = document.createElement('div');
+    digit.className = 'digit';
+
+    ['a', 'b', 'c', 'd', 'e', 'f', 'g'].forEach((seg) => {
+      const segment = document.createElement('div');
+      segment.className = `segment ${seg === 'a' || seg === 'd' || seg === 'g' ? 'h' : 'v'} ${seg}`;
+      if (SEGMENTS[ch]?.includes(seg)) {
+        segment.classList.add('on');
+      }
+      digit.appendChild(segment);
+    });
+
+    timerContainer.appendChild(digit);
+  });
+}
+
+function updateDisplay() {
+  const red = state.phase === 'running' && state.remainingMs <= 10000;
+  buildDigits(formatTimeFromMs(state.remainingMs), red);
+}
+
+function ensureAudioContext() {
+  if (!state.audio) {
+    state.audio = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (state.audio.state === 'suspended') {
+    state.audio.resume();
+  }
+}
+
+function playTone({ freq = 220, type = 'sawtooth', duration = 0.2, gain = 0.25, when = 0 }) {
+  ensureAudioContext();
+  const t = state.audio.currentTime + when;
+  const osc = state.audio.createOscillator();
+  const g = state.audio.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+  osc.connect(g).connect(state.audio.destination);
+  osc.start(t);
+  osc.stop(t + duration + 0.02);
+}
+
+function playBuzz() {
+  playTone({ freq: 120, type: 'square', duration: 0.24, gain: 0.45 });
+}
+
+function playGoTripleBuzz() {
+  playTone({ freq: 180, type: 'square', duration: 0.1, gain: 0.4, when: 0.0 });
+  playTone({ freq: 220, type: 'square', duration: 0.1, gain: 0.4, when: 0.13 });
+  playTone({ freq: 260, type: 'square', duration: 0.1, gain: 0.4, when: 0.26 });
+}
+
+function startTickingLoop() {
+  stopTickingLoop();
+  state.tickingInterval = setInterval(() => {
+    if (state.phase !== 'running' || state.remainingMs > 10000 || state.remainingMs <= 0) {
+      return;
+    }
+    playTone({ freq: 4, type: 'square', duration: 0.08, gain: 0.22 });
+  }, 250);
+}
+
+function stopTickingLoop() {
+  if (state.tickingInterval) {
+    clearInterval(state.tickingInterval);
+    state.tickingInterval = null;
+  }
+}
+
+function playFinalBuzzer() {
+  playTone({ freq: 90, type: 'sawtooth', duration: 1.9, gain: 0.65 });
+}
+
+function runTimer() {
+  state.phase = 'running';
+  statusLine.textContent = 'Space to Pause, r to Reset';
+  pauseInfo.classList.add('hidden');
+  state.runStartTs = performance.now();
+  state.runStartMs = state.remainingMs;
+  startTickingLoop();
+
+  const frame = (ts) => {
+    if (state.phase !== 'running') {
+      return;
+    }
+    const elapsed = ts - state.runStartTs;
+    state.remainingMs = Math.max(0, state.runStartMs - elapsed);
     updateDisplay();
-    state.timerInterval = requestAnimationFrame(tick);
+
+    if (state.remainingMs <= 0) {
+      finishTimer();
+      return;
+    }
+
+    state.rafId = requestAnimationFrame(frame);
   };
 
-  state.timerInterval = requestAnimationFrame(tick);
+  state.rafId = requestAnimationFrame(frame);
 }
 
-async function finishCountdown() {
-  clearTimerInterval();
-  stopTickingSound();
-  setMode('finished');
-  setStatus('Time! Press r to reset.');
-
-  const flashes = 8;
-  playBuzzer();
-  for (let i = 0; i < flashes; i += 1) {
-    el.timerDisplay.style.visibility = i % 2 === 0 ? 'hidden' : 'visible';
-    await sleep(250);
+function stopRunningAnimation() {
+  if (state.rafId) {
+    cancelAnimationFrame(state.rafId);
+    state.rafId = null;
   }
-  el.timerDisplay.style.visibility = 'visible';
 }
 
-function pauseCountdown() {
-  if (state.mode !== 'running') return;
-  clearTimerInterval();
-  stopTickingSound();
-  setMode('paused');
-  setStatus('Match Paused');
+function finishTimer() {
+  stopRunningAnimation();
+  stopTickingLoop();
+  state.phase = 'finished';
+  statusLine.textContent = "Time's up! Press r to reset";
+  state.remainingMs = 0;
+  updateDisplay();
+  playFinalBuzzer();
+
+  let flashes = 0;
+  state.flashInterval = setInterval(() => {
+    state.flashVisible = !state.flashVisible;
+    timerContainer.style.visibility = state.flashVisible ? 'visible' : 'hidden';
+    flashes += 1;
+    if (flashes >= 8) {
+      clearInterval(state.flashInterval);
+      state.flashInterval = null;
+      timerContainer.style.visibility = 'visible';
+    }
+  }, 250);
 }
 
-function resetCountdown() {
-  clearTimerInterval();
-  stopTickingSound();
-  state.remainingMs = state.configuredSeconds * 1000;
-  setMode('idle');
-  setStatus('Press Space to Start');
-  hideOverlay();
+function setDurationFromInputs() {
+  const mins = Number(minutesInput.value || 0);
+  const secs = Number(secondsInput.value || 0);
+  const total = clampDuration(mins, secs);
+  state.configuredSeconds = total;
+  state.remainingMs = total * 1000;
+  state.phase = 'idle';
+  statusLine.textContent = 'Press Space to Start';
+  pauseInfo.classList.add('hidden');
+  stopRunningAnimation();
+  stopTickingLoop();
+  if (state.flashInterval) {
+    clearInterval(state.flashInterval);
+    state.flashInterval = null;
+    timerContainer.style.visibility = 'visible';
+  }
+  const normalizedMins = Math.floor(total / 60);
+  const normalizedSecs = total % 60;
+  minutesInput.value = normalizedMins;
+  secondsInput.value = normalizedSecs;
   updateDisplay();
 }
 
-async function handleSpace() {
-  ensureAudio();
-  if (state.mode === 'idle' || state.mode === 'paused') {
-    await runStartSequence();
-    return;
+async function runPreStart({ includeBlackScreen }) {
+  state.phase = includeBlackScreen ? 'prestart_black' : 'prestart_countdown';
+  pauseInfo.classList.add('hidden');
+  overlay.classList.remove('hidden');
+
+  if (includeBlackScreen) {
+    overlayText.textContent = '';
+    await sleep(5000);
   }
 
-  if (state.mode === 'running') {
-    pauseCountdown();
+  state.phase = 'prestart_countdown';
+  for (const value of ['3', '2', '1']) {
+    overlayText.textContent = value;
+    playBuzz();
+    await sleep(1000);
   }
+
+  overlayText.textContent = 'GO!';
+  playGoTripleBuzz();
+  await sleep(1000);
+  overlay.classList.add('hidden');
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-el.applyTimeBtn.addEventListener('click', () => {
-  const parsed = parseTimeToSeconds(el.timeInput.value);
-  if (!parsed) {
-    setStatus('Invalid time. Use M:SS from 0:01 to 59:59');
+function pauseTimer() {
+  if (state.phase !== 'running') {
+    return;
+  }
+  stopRunningAnimation();
+  stopTickingLoop();
+  state.phase = 'paused';
+  statusLine.textContent = 'Match Paused';
+  pauseInfo.classList.remove('hidden');
+}
+
+async function startOrResume() {
+  if (state.phase === 'running' || state.phase === 'prestart_black' || state.phase === 'prestart_countdown') {
+    return;
+  }
+  if (state.phase === 'finished') {
     return;
   }
 
-  state.configuredSeconds = parsed;
-  state.remainingMs = parsed * 1000;
-  setMode('idle');
-  setStatus('Press Space to Start');
-  stopTickingSound();
-  clearTimerInterval();
-  updateDisplay();
-});
-
-el.timeInput.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') {
-    el.applyTimeBtn.click();
+  if (state.phase === 'idle') {
+    await runPreStart({ includeBlackScreen: true });
+  } else if (state.phase === 'paused') {
+    await runPreStart({ includeBlackScreen: false });
   }
-});
 
-window.addEventListener('keydown', (event) => {
-  if (event.key === ' ') {
+  runTimer();
+}
+
+function resetTimer() {
+  stopRunningAnimation();
+  stopTickingLoop();
+  if (state.flashInterval) {
+    clearInterval(state.flashInterval);
+    state.flashInterval = null;
+    timerContainer.style.visibility = 'visible';
+  }
+
+  state.phase = 'idle';
+  state.remainingMs = state.configuredSeconds * 1000;
+  statusLine.textContent = 'Press Space to Start';
+  pauseInfo.classList.add('hidden');
+  overlay.classList.add('hidden');
+  updateDisplay();
+}
+
+applyDurationBtn.addEventListener('click', setDurationFromInputs);
+minutesInput.addEventListener('change', setDurationFromInputs);
+secondsInput.addEventListener('change', setDurationFromInputs);
+
+window.addEventListener('keydown', async (event) => {
+  if (event.code === 'Space') {
     event.preventDefault();
-    if (state.animationInProgress) return;
-    handleSpace();
+    if (state.phase === 'running') {
+      pauseTimer();
+      return;
+    }
+    await startOrResume();
   }
 
   if (event.key.toLowerCase() === 'r') {
     event.preventDefault();
-    resetCountdown();
+    resetTimer();
   }
 });
 
