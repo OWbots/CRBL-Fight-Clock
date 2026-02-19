@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CRBL Fight Clock</title>
+    <link rel="stylesheet" href="static/style.css" />
+  </head>
+  <body>
+    <main class="clock-app">
+      <header class="topbar">
+        <div class="logo-mark" aria-hidden="true">
+          <div class="logo-ring">CRBL</div>
+        </div>
+        <div class="title-block">
+          <h1>CRBL CLOCK</h1>
+          <p id="statusText">Press Space to Start</p>
+        </div>
+      </header>
+
+      <section class="controls" id="controls">
+        <label for="timeInput">Fight Length (M:SS or MM:SS)</label>
+        <input id="timeInput" type="text" value="2:00" inputmode="numeric" aria-label="Fight length" />
+        <button id="applyTimeBtn">Set Time</button>
+      </section>
+
+      <section class="stage" id="stage">
+        <div id="overlayText" class="overlay hidden"></div>
+        <div id="timerDisplay" class="timer">2:00</div>
+      </section>
+
+      <section class="paused-help hidden" id="pausedHelp">
+        <p>Match Paused</p>
+        <p>Space -&gt; Resume</p>
+        <p>r -&gt; reset</p>
+      </section>
+    </main>
+
+    <script src="static/app.js"></script>
+  </body>
+</html>
