@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CRBL Fight Clock</title>
+    <link rel="stylesheet" href="./styles.css?v=20260219" />
+  </head>
+  <body>
+    <main id="app">
+      <header class="top-bar">
+        <div class="brand-block">
+          <div class="logo">CRBL</div>
+          <div class="subtitle">COMBAT ROBOTICS BRICK LEAGUE</div>
+        </div>
+        <div class="title-block">
+          <h1>CRBL CLOCK</h1>
+          <p id="statusLine">Press Space to Start</p>
+        </div>
+      </header>
+
+      <section class="controls" aria-label="Clock settings">
+        <label for="durationMinutes">Minutes</label>
+        <input id="durationMinutes" type="number" min="0" max="59" value="2" />
+        <label for="durationSeconds">Seconds</label>
+        <input id="durationSeconds" type="number" min="0" max="59" value="0" />
+        <button id="applyDuration" type="button">Set Duration</button>
+      </section>
+
+      <section id="timerContainer" aria-label="Fight clock"></section>
+
+      <section id="overlay" class="overlay hidden" aria-live="assertive">
+        <div id="overlayText"></div>
+      </section>
+
+      <section id="pauseInfo" class="pause-info hidden" aria-live="polite">
+        <p class="paused">Match Paused</p>
+        <p>Space -&gt; Resume</p>
+        <p>r -&gt; reset</p>
+      </section>
+    </main>
+
+    <script src="./app.js?v=20260219"></script>
+  </body>
+</html>
