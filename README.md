@@ -26,3 +26,16 @@ Then open <http://localhost:8000>.
 - Last 10 seconds ticking sound while running
 - Final buzzer and 2-second flashing timer at `0:00`
 - Countdown buzzers for `3`, `2`, `1`; triple higher-pitch buzz for `GO!`
+
+
+> Note: Static asset URLs use a version query string to avoid stale browser cache issues when updating between versions.
+
+
+## Opening from GitHub
+
+If you open files in the normal GitHub code viewer (`github.com/.../blob/...`), that page is only a source viewer and will not run the clock app.
+
+Use one of these instead:
+
+- Run locally with `python3 server.py` and open `http://localhost:8000`
+- Or publish with GitHub Pages and open the Pages URL
